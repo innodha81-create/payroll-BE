@@ -132,7 +132,7 @@ export class LoginController {
         message: result.message
       });
     } catch (err: any) {
-      res.status(500).json({
+      res.status(400).json({
         success: false,
         error: err.message || 'Failed to process request.'
       });

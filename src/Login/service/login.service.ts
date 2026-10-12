@@ -180,22 +180,28 @@ export class LoginService {
   }
 
   static async forgotPassword(dto: ForgotPasswordDTO, clientDetails: ClientDetails) {
-    const user = await LoginModel.findUserByEmail(dto.email);
+    const user = await LoginModel.findUserByEmail(dto.email.trim());
 
-    if (user && user.is_active) {
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      const tokenHash = hashToken(rawToken);
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-
-      await LoginModel.savePasswordReset(user.id, tokenHash, expiresAt);
-      await sendPasswordResetEmail(user.email, rawToken, user.first_name || undefined);
-      recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'RESET_LINK_SENT');
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+    if (!user) {
+      recordAuditLog(null, dto.email.trim(), 'PASSWORD_RESET', clientDetails, 'EMAIL_NOT_REGISTERED');
+      throw new Error('This email address is not registered in our system.');
     }
 
+    if (!user.is_active) {
+      recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'ACCOUNT_DEACTIVATED');
+      throw new Error('Your account has been deactivated. Please contact support.');
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+
+    await LoginModel.savePasswordReset(user.id, tokenHash, expiresAt);
+    await sendPasswordResetEmail(user.email, rawToken, user.first_name || undefined);
+    recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'RESET_LINK_SENT');
+
     return {
-      message: 'If the email is registered, a password reset link has been sent.'
+      message: 'Password reset link has been sent to your email.'
     };
   }
 
