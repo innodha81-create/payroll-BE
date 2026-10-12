@@ -1,15 +1,29 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { EmployeePayroll, PayrollSummary } from './types.js';
+import { loginRoutes } from './Login/index.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://icomplyone.com',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
+app.use(cookieParser());
 app.use(express.json());
+
+// Mount Login & Authentication Module
+app.use('/api/auth', loginRoutes);
+app.use('/api', loginRoutes); // Also supports /api/login, /api/logout, /api/forgot-password directly
 
 // In-memory data store for demonstration
 let employees: EmployeePayroll[] = [

@@ -1,0 +1,266 @@
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import { LoginModel } from '../model/login.model';
+import { LoginDTO, ForgotPasswordDTO, ResetPasswordDTO } from '../types/login.types';
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken
+} from '../utils/token.utils';
+import { ClientDetails, recordAuditLog } from '../utils/audit.utils';
+import {
+  sendPasswordResetEmail,
+  sendPasswordChangedConfirmation
+} from './mail.service';
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export class LoginService {
+  static async login(dto: LoginDTO, clientDetails: ClientDetails) {
+    const user = await LoginModel.findUserByEmail(dto.email);
+
+    if (!user) {
+      recordAuditLog(null, dto.email, 'FAILED', clientDetails, 'USER_NOT_FOUND');
+      throw new Error('Invalid email or password.');
+    }
+
+    if (!user.is_active) {
+      recordAuditLog(user.id, dto.email, 'FAILED', clientDetails, 'ACCOUNT_DEACTIVATED');
+      throw new Error('Your account has been deactivated. Please contact support.');
+    }
+
+    const isMatch = await bcrypt.compare(dto.password, user.password_hash);
+    if (!isMatch) {
+      recordAuditLog(user.id, dto.email, 'FAILED', clientDetails, 'INVALID_PASSWORD');
+      throw new Error('Invalid email or password.');
+    }
+
+    // 1. Generate Dual RS256 Tokens
+    const access = generateAccessToken({
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+    const refresh = generateRefreshToken(user.id);
+
+    // 2. Save Refresh Token in Database (with SHA-256 hash for RTR)
+    const refreshHash = hashToken(refresh.token);
+    const refreshExpiresAt = new Date(Date.now() + refresh.expiresInSeconds * 1000);
+
+    await LoginModel.saveRefreshToken(
+      user.id,
+      refreshHash,
+      refresh.familyId,
+      `${clientDetails.deviceType} (${clientDetails.osName} / ${clientDetails.browserName})`,
+      clientDetails.ip,
+      refreshExpiresAt
+    );
+
+    // 3. Record Audit Log (Async / Non-blocking)
+    recordAuditLog(user.id, user.email, 'SUCCESS', clientDetails);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role
+      },
+      tokens: {
+        accessToken: access.token,
+        refreshToken: refresh.token,
+        tokenType: 'Bearer',
+        expiresIn: access.expiresInSeconds
+      }
+    };
+  }
+
+  static async logout(
+    accessToken: string | null,
+    refreshToken: string | null,
+    clientDetails: ClientDetails
+  ) {
+    let userId: string | null = null;
+    let email = 'unknown';
+
+    // 1. Instant Access Token Blacklisting
+    if (accessToken) {
+      try {
+        const decoded = jwt.decode(accessToken) as any;
+        if (decoded && decoded.jti && decoded.exp) {
+          userId = decoded.sub || null;
+          email = decoded.email || 'unknown';
+          const expiresAt = new Date(decoded.exp * 1000);
+          await LoginModel.addTokenToBlacklist(decoded.jti, userId, expiresAt);
+        }
+      } catch (err) {
+        console.error('[Logout] Failed to blacklist access token:', err);
+      }
+    }
+
+    // 2. Revoke Refresh Token Session Family in DB
+    if (refreshToken) {
+      try {
+        const payload = jwt.decode(refreshToken) as any;
+        if (payload && payload.familyId) {
+          await LoginModel.revokeRefreshTokenFamily(payload.familyId);
+        }
+      } catch (err) {
+        console.error('[Logout] Failed to revoke refresh token:', err);
+      }
+    }
+
+    // 3. Record Audit Log
+    recordAuditLog(userId, email, 'LOGOUT', clientDetails);
+
+    return { message: 'Logged out successfully. Tokens invalidated.' };
+  }
+
+  static async rotateRefreshToken(oldRefreshToken: string, clientDetails: ClientDetails) {
+    let payload: any;
+    try {
+      payload = verifyRefreshToken(oldRefreshToken);
+    } catch (err: any) {
+      throw new Error('Invalid or expired refresh token. Please log in again.');
+    }
+
+    const oldHash = hashToken(oldRefreshToken);
+    const storedToken = await LoginModel.findRefreshTokenByHash(oldHash);
+
+    if (!storedToken) {
+      throw new Error('Refresh token not found.');
+    }
+
+    // REFRESH TOKEN REUSE DETECTION (Compromise protection)
+    if (storedToken.revoked) {
+      await LoginModel.revokeRefreshTokenFamily(storedToken.family_id);
+      recordAuditLog(storedToken.user_id, 'security_alert', 'FAILED', clientDetails, 'TOKEN_REUSE_DETECTED');
+      throw new Error('Security alert: Refresh token reuse detected. All sessions revoked.');
+    }
+
+    // Revoke old token
+    await LoginModel.revokeRefreshTokenFamily(storedToken.family_id);
+
+    // Fetch user
+    const user = await LoginModel.findUserById(storedToken.user_id);
+    if (!user || !user.is_active) {
+      throw new Error('User no longer active.');
+    }
+
+    // Generate new pair within same family
+    const access = generateAccessToken({
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+    const newRefresh = generateRefreshToken(user.id, storedToken.family_id);
+    const newHash = hashToken(newRefresh.token);
+    const newExpiresAt = new Date(Date.now() + newRefresh.expiresInSeconds * 1000);
+
+    await LoginModel.saveRefreshToken(
+      user.id,
+      newHash,
+      newRefresh.familyId,
+      `${clientDetails.deviceType} (${clientDetails.osName} / ${clientDetails.browserName})`,
+      clientDetails.ip,
+      newExpiresAt
+    );
+
+    return {
+      accessToken: access.token,
+      refreshToken: newRefresh.token,
+      expiresIn: access.expiresInSeconds
+    };
+  }
+
+  static async forgotPassword(dto: ForgotPasswordDTO, clientDetails: ClientDetails) {
+    const user = await LoginModel.findUserByEmail(dto.email);
+
+    if (user && user.is_active) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+
+      await LoginModel.savePasswordReset(user.id, tokenHash, expiresAt);
+      await sendPasswordResetEmail(user.email, rawToken, user.first_name || undefined);
+      recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'RESET_LINK_SENT');
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    return {
+      message: 'If the email is registered, a password reset link has been sent.'
+    };
+  }
+
+  static async resetPassword(dto: ResetPasswordDTO, clientDetails: ClientDetails) {
+    if (!dto.newPassword || !dto.confirmPassword) {
+      throw new Error('New password and confirmation password are required.');
+    }
+
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new Error('Passwords do not match.');
+    }
+
+    if (dto.newPassword.length < 8) {
+      throw new Error('Password must be at least 8 characters long.');
+    }
+
+    const tokenHash = hashToken(dto.token);
+    const resetRecord = await LoginModel.findValidPasswordReset(tokenHash);
+
+    if (!resetRecord) {
+      throw new Error('Invalid or expired password reset link.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    await LoginModel.updateUserPassword(resetRecord.user_id, passwordHash);
+    await LoginModel.markPasswordResetAsUsed(resetRecord.id);
+    await LoginModel.revokeAllUserTokens(resetRecord.user_id);
+
+    const user = await LoginModel.findUserById(resetRecord.user_id);
+    if (!user) {
+      throw new Error('User not found.');
+    }
+
+    await sendPasswordChangedConfirmation(user.email, user.first_name || undefined);
+    recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'PASSWORD_CHANGE_SUCCESS');
+
+    // Automatically issue fresh authentication tokens for instant auto-login
+    const access = generateAccessToken(user);
+    const refresh = generateRefreshToken(user.id);
+    const refreshExpiresAt = new Date(Date.now() + refresh.expiresInSeconds * 1000);
+    const refreshHash = hashToken(refresh.token);
+
+    await LoginModel.saveRefreshToken(
+      user.id,
+      refreshHash,
+      refresh.familyId,
+      `${clientDetails.deviceType} (${clientDetails.osName} / ${clientDetails.browserName})`,
+      clientDetails.ip,
+      refreshExpiresAt
+    );
+
+    return {
+      message: 'Password successfully updated. Logging you in...',
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role
+      },
+      tokens: {
+        accessToken: access.token,
+        refreshToken: refresh.token,
+        expiresIn: access.expiresInSeconds
+      }
+    };
+  }
+}
