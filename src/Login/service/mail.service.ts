@@ -16,12 +16,17 @@ const transporter = nodemailer.createTransport({
 export async function sendPasswordResetEmail(
   to: string,
   resetToken: string,
-  firstName?: string
+  firstName?: string,
+  clientOrigin?: string
 ): Promise<boolean> {
   dotenv.config();
 
-  // Dynamic frontend base from .env / .env.production (supports http://localhost:5173 locally and https://icomplyone.com live)
-  const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/+$/, '');
+  // Smart frontend base: client origin > FRONTEND_URL > https://icomplyone.com
+  let frontendBase = clientOrigin;
+  if (!frontendBase || frontendBase.includes('null') || frontendBase.includes('undefined')) {
+    frontendBase = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://icomplyone.com' : 'http://localhost:5173');
+  }
+  frontendBase = frontendBase.trim().replace(/\/+$/, '');
   const resetUrl = `${frontendBase}/reset-password?token=${resetToken}`;
   const recipientName = firstName || 'Valued User';
 

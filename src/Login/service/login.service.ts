@@ -179,7 +179,7 @@ export class LoginService {
     };
   }
 
-  static async forgotPassword(dto: ForgotPasswordDTO, clientDetails: ClientDetails) {
+  static async forgotPassword(dto: ForgotPasswordDTO, clientDetails: ClientDetails, clientOrigin?: string) {
     const user = await LoginModel.findUserByEmail(dto.email.trim());
 
     if (!user) {
@@ -197,7 +197,7 @@ export class LoginService {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
     await LoginModel.savePasswordReset(user.id, tokenHash, expiresAt);
-    await sendPasswordResetEmail(user.email, rawToken, user.first_name || undefined);
+    await sendPasswordResetEmail(user.email, rawToken, user.first_name || undefined, clientOrigin);
     recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'RESET_LINK_SENT');
 
     return {

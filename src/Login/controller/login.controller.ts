@@ -125,7 +125,8 @@ export class LoginController {
       }
 
       const clientDetails = parseClientDetails(req);
-      const result = await LoginService.forgotPassword({ email }, clientDetails);
+      const origin = (req.headers.origin as string) || (req.headers.referer ? new URL(req.headers.referer as string).origin : undefined);
+      const result = await LoginService.forgotPassword({ email }, clientDetails, origin);
 
       res.status(200).json({
         success: true,
