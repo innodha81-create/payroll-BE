@@ -11,12 +11,23 @@ const index_js_1 = require("./Login/index.js");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
+// Trust proxy for Render/Cloudflare load balancers to get real client IP
+app.set('trust proxy', true);
+const allowedOrigins = [
+    'https://icomplyone.com',
+    'https://www.icomplyone.com',
+    process.env.FRONTEND_URL || '',
+    'http://localhost:5173',
+    'http://localhost:3000'
+].filter(Boolean);
 app.use((0, cors_1.default)({
-    origin: [
-        'https://icomplyone.com',
-        'http://localhost:5173',
-        'http://localhost:3000'
-    ],
+    origin: (origin, callback) => {
+        // allow requests with no origin (like mobile apps or curl) or if in allowed list
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(null, true); // Permissive in production for all client subdomains/ports
+    },
     credentials: true
 }));
 app.use((0, cookie_parser_1.default)());
