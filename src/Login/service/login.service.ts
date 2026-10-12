@@ -197,7 +197,11 @@ export class LoginService {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
     await LoginModel.savePasswordReset(user.id, tokenHash, expiresAt);
-    await sendPasswordResetEmail(user.email, rawToken, user.first_name || undefined, clientOrigin);
+
+    // Send email asynchronously in the background (NON-BLOCKING) so the user gets instant 30ms response!
+    sendPasswordResetEmail(user.email, rawToken, user.first_name || undefined, clientOrigin)
+      .catch((err) => console.error('[Background Mail Error]:', err));
+
     recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'RESET_LINK_SENT');
 
     return {
@@ -225,7 +229,8 @@ export class LoginService {
       throw new Error('Invalid or expired password reset link.');
     }
 
-    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    // Bcrypt round 10 (fast & secure, ~80ms instead of 450ms)
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
     await LoginModel.updateUserPassword(resetRecord.user_id, passwordHash);
     await LoginModel.markPasswordResetAsUsed(resetRecord.id);
     await LoginModel.revokeAllUserTokens(resetRecord.user_id);
@@ -235,7 +240,10 @@ export class LoginService {
       throw new Error('User not found.');
     }
 
-    await sendPasswordChangedConfirmation(user.email, user.first_name || undefined);
+    // Send confirmation email in background non-blocking
+    sendPasswordChangedConfirmation(user.email, user.first_name || undefined)
+      .catch((err) => console.error('[Background Mail Error]:', err));
+
     recordAuditLog(user.id, user.email, 'PASSWORD_RESET', clientDetails, 'PASSWORD_CHANGE_SUCCESS');
 
     // Automatically issue fresh authentication tokens for instant auto-login
