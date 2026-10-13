@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const index_js_1 = require("./Login/index.js");
+const index_js_2 = require("./Country/index.js");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -35,6 +36,9 @@ app.use(express_1.default.json());
 // Mount Login & Authentication Module
 app.use('/api/auth', index_js_1.loginRoutes);
 app.use('/api', index_js_1.loginRoutes); // Also supports /api/login, /api/logout, /api/forgot-password directly
+// Mount Country Management Module
+app.use('/api/country', index_js_2.countryRoutes);
+app.use('/api/countries', index_js_2.countryRoutes);
 // In-memory data store for demonstration
 let employees = [
     {
