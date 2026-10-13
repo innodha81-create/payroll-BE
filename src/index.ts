@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { EmployeePayroll, PayrollSummary } from './types.js';
 import { loginRoutes } from './Login/index.js';
+import { countryRoutes } from './Country/index.js';
 
 dotenv.config();
 
@@ -37,6 +38,10 @@ app.use(express.json());
 // Mount Login & Authentication Module
 app.use('/api/auth', loginRoutes);
 app.use('/api', loginRoutes); // Also supports /api/login, /api/logout, /api/forgot-password directly
+
+// Mount Country Management Module
+app.use('/api/country', countryRoutes);
+app.use('/api/countries', countryRoutes);
 
 // In-memory data store for demonstration
 let employees: EmployeePayroll[] = [
