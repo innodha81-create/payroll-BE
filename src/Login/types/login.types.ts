@@ -8,6 +8,8 @@ export interface UserRecord {
   last_name: string | null;
   role: UserRole;
   is_active: boolean;
+  company_id?: string | null;
+  company_status?: string | null;
   created_at: Date;
   updated_at: Date;
 }

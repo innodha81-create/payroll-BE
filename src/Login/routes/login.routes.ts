@@ -11,6 +11,9 @@ router.post('/refresh-token', LoginController.refreshToken);
 router.post('/forgot-password', LoginController.forgotPassword);
 router.post('/reset-password', LoginController.resetPassword);
 
+// Login Audit Logs Endpoint
+router.get('/audit-logs', LoginController.getLoginAuditLogs);
+
 import { LoginModel } from '../model/login.model';
 
 // Protected Verification Endpoint

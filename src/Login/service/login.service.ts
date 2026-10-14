@@ -32,6 +32,12 @@ export class LoginService {
       throw new Error('Your account has been deactivated. Please contact support.');
     }
 
+    // Company Status Check: If company is Inactive, block login with clear error
+    if (user.company_id && user.company_status === 'Inactive') {
+      recordAuditLog(user.id, dto.email, 'FAILED', clientDetails, 'COMPANY_INACTIVE');
+      throw new Error('Your company account is currently inactive. Please contact the Super Admin.');
+    }
+
     const isMatch = await bcrypt.compare(dto.password, user.password_hash);
     if (!isMatch) {
       recordAuditLog(user.id, dto.email, 'FAILED', clientDetails, 'INVALID_PASSWORD');
@@ -150,6 +156,9 @@ export class LoginService {
     const user = await LoginModel.findUserById(storedToken.user_id);
     if (!user || !user.is_active) {
       throw new Error('User no longer active.');
+    }
+    if (user.company_id && user.company_status === 'Inactive') {
+      throw new Error('Your company account is currently inactive. Please contact the Super Admin.');
     }
 
     // Generate new pair within same family

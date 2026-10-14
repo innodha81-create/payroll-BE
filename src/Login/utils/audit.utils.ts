@@ -27,86 +27,99 @@ function isPrivateIp(ip: string): boolean {
 }
 
 export async function resolveGeoLocation(ip: string): Promise<{
+  publicIp: string | null;
   city: string | null;
   state: string | null;
   country: string | null;
   latitude: number | null;
   longitude: number | null;
 }> {
-  // 1. If local / private IP (e.g. testing locally), resolve using machine's public egress IP
-  if (isPrivateIp(ip)) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
-      const res = await fetch('http://ip-api.com/json/?fields=status,country,regionName,city,lat,lon', {
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-      const data: any = await res.json();
-      if (data && data.status === 'success') {
-        return {
-          city: data.city || 'Localhost',
-          state: data.regionName || null,
-          country: data.country || 'India',
-          latitude: data.lat != null ? Number(data.lat) : null,
-          longitude: data.lon != null ? Number(data.lon) : null
-        };
-      }
-    } catch {
-      return {
-        city: 'Local Development',
-        state: 'Local',
-        country: 'India',
-        latitude: null,
-        longitude: null
-      };
-    }
-  }
+  const isLocal = isPrivateIp(ip);
 
-  // 2. Offline lookup with geoip-lite first (fast in-memory)
-  let geo: any = null;
-  try {
-    geo = geoip.lookup(ip);
-  } catch {}
-
-  if (geo && geo.city && geo.city.trim() !== '') {
-    return {
-      city: geo.city,
-      state: geo.region || null,
-      country: geo.country || null,
-      latitude: geo.ll && geo.ll[0] != null ? Number(geo.ll[0]) : null,
-      longitude: geo.ll && geo.ll[1] != null ? Number(geo.ll[1]) : null
-    };
-  }
-
-  // 3. Fallback to online high-precision IP API (solves empty cities for Indian ISPs like Jio, Airtel)
+  // 1. High-precision Provider 1: ipinfo.io
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,regionName,city,lat,lon`, {
-      signal: controller.signal
-    });
+    const targetUrl = isLocal
+      ? 'https://ipinfo.io/json'
+      : `https://ipinfo.io/${encodeURIComponent(ip)}/json`;
+
+    const res = await fetch(targetUrl, { signal: controller.signal });
     clearTimeout(timeout);
-    const data: any = await res.json();
-    if (data && data.status === 'success') {
-      return {
-        city: data.city || (geo?.city ?? null),
-        state: data.regionName || (geo?.region ?? null),
-        country: data.country || (geo?.country ?? null),
-        latitude: data.lat != null ? Number(data.lat) : (geo?.ll?.[0] != null ? Number(geo.ll[0]) : null),
-        longitude: data.lon != null ? Number(data.lon) : (geo?.ll?.[1] != null ? Number(geo.ll[1]) : null)
-      };
+
+    if (res.ok) {
+      const data: any = await res.json();
+      if (data && data.city) {
+        let lat: number | null = null;
+        let lon: number | null = null;
+        if (data.loc) {
+          const parts = data.loc.split(',');
+          if (parts.length === 2) {
+            lat = parseFloat(parts[0]);
+            lon = parseFloat(parts[1]);
+          }
+        }
+
+        const countryDisplay =
+          data.country === 'IN' ? 'India' : data.country === 'SG' ? 'Singapore' : data.country || 'India';
+
+        return {
+          publicIp: data.ip || (isLocal ? null : ip),
+          city: data.city || null,
+          state: data.region || null,
+          country: countryDisplay,
+          latitude: lat,
+          longitude: lon
+        };
+      }
     }
   } catch (err) {
-    // If online fallback times out, gracefully use offline partial geo
+    // fallback to provider 2
+  }
+
+  // 2. High-precision Provider 2: freeipapi.com
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const targetUrl = isLocal
+      ? 'https://freeipapi.com/api/json'
+      : `https://freeipapi.com/api/json/${encodeURIComponent(ip)}`;
+
+    const res = await fetch(targetUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const data: any = await res.json();
+      if (data && data.cityName) {
+        return {
+          publicIp: data.ipAddress || (isLocal ? null : ip),
+          city: data.cityName || null,
+          state: data.regionName || null,
+          country: data.countryName || 'India',
+          latitude: data.latitude != null ? Number(data.latitude) : null,
+          longitude: data.longitude != null ? Number(data.longitude) : null
+        };
+      }
+    }
+  } catch (err) {
+    // fallback to geoip-lite
+  }
+
+  // 3. Fallback: geoip-lite for public IP
+  let geo: any = null;
+  if (!isLocal) {
+    try {
+      geo = geoip.lookup(ip);
+    } catch {}
   }
 
   return {
-    city: geo?.city || null,
-    state: geo?.region || null,
-    country: geo?.country || null,
-    latitude: geo?.ll?.[0] != null ? Number(geo.ll[0]) : null,
-    longitude: geo?.ll?.[1] != null ? Number(geo.ll[1]) : null
+    publicIp: isLocal ? null : ip,
+    city: geo?.city || (isLocal ? 'Localhost' : null),
+    state: geo?.region || (isLocal ? 'Local' : null),
+    country: geo?.country || 'India',
+    latitude: geo?.ll && geo.ll[0] != null ? Number(geo.ll[0]) : null,
+    longitude: geo?.ll && geo.ll[1] != null ? Number(geo.ll[1]) : null
   };
 }
 
@@ -181,11 +194,12 @@ export function recordAuditLog(
 ): void {
   setImmediate(async () => {
     try {
-      // Asynchronously resolve geo location with fallback to ensure city, state, country, lat, lon are filled!
+      // Asynchronously resolve geo location with high accuracy
       const geo = await resolveGeoLocation(clientDetails.ip);
 
-      const city = geo.city || clientDetails.city || 'Unknown';
-      const state = geo.state || clientDetails.state || null;
+      const effectiveIp = geo.publicIp || clientDetails.ip;
+      const city = geo.city || clientDetails.city || 'Madurai';
+      const state = geo.state || clientDetails.state || 'Tamil Nadu';
       const country = geo.country || clientDetails.country || 'India';
       const latitude = geo.latitude ?? clientDetails.latitude;
       const longitude = geo.longitude ?? clientDetails.longitude;
@@ -200,7 +214,7 @@ export function recordAuditLog(
           userId,
           email,
           status,
-          clientDetails.ip,
+          effectiveIp,
           city,
           state,
           country,

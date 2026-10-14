@@ -71,8 +71,32 @@ export class CountryModel {
 
   public static async deleteCountry(id: string): Promise<boolean> {
     await this.ensureTableExists();
+    const found = await this.findById(id);
     const query = 'DELETE FROM countries WHERE id = $1 RETURNING id;';
     const res = await pool.query(query, [id]);
+
+    if (found && found.name) {
+      try {
+        // 1. Delete if it is a root country
+        await pool.query(
+          'DELETE FROM country_pricings WHERE LOWER(root_country_name) = LOWER($1);',
+          [found.name.trim()]
+        );
+        // 2. Remove as target country key from JSONB in all other root countries
+        await pool.query(
+          'UPDATE country_pricings SET prices = prices - $1, updated_at = CURRENT_TIMESTAMP;',
+          [found.name.trim()]
+        );
+        // 3. Prune from country_onboarding JSONB if configured
+        await pool.query(
+          'UPDATE country_onboarding SET fees = fees - $1, updated_at = CURRENT_TIMESTAMP;',
+          [found.name.trim()]
+        );
+      } catch (e) {
+        console.error('Error cascading country deletion:', e);
+      }
+    }
+
     return (res.rowCount ?? 0) > 0;
   }
 }

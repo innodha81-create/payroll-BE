@@ -9,6 +9,9 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const index_js_1 = require("./Login/index.js");
 const index_js_2 = require("./Country/index.js");
+const index_js_3 = require("./Pricing/index.js");
+const index_js_4 = require("./Onboard/index.js");
+const index_js_5 = require("./Companies/index.js");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -32,13 +35,22 @@ app.use((0, cors_1.default)({
     credentials: true
 }));
 app.use((0, cookie_parser_1.default)());
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
 // Mount Login & Authentication Module
 app.use('/api/auth', index_js_1.loginRoutes);
 app.use('/api', index_js_1.loginRoutes); // Also supports /api/login, /api/logout, /api/forgot-password directly
 // Mount Country Management Module
 app.use('/api/country', index_js_2.countryRoutes);
 app.use('/api/countries', index_js_2.countryRoutes);
+// Mount Pricing Management Module
+app.use('/api/pricing', index_js_3.pricingRoutes);
+// Mount Onboard Management Module
+app.use('/api/onboard', index_js_4.onboardRoutes);
+app.use('/api/onboarding', index_js_4.onboardRoutes);
+// Mount Companies Management Module
+app.use('/api/companies', index_js_5.companyRoutes);
+app.use('/api/company', index_js_5.companyRoutes);
 // In-memory data store for demonstration
 let employees = [
     {

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { LoginService } from '../service/login.service';
+import { LoginModel } from '../model/login.model';
 import { parseClientDetails } from '../utils/audit.utils';
 
 export class LoginController {
@@ -178,6 +179,31 @@ export class LoginController {
       res.status(400).json({
         success: false,
         error: err.message || 'Failed to reset password.'
+      });
+    }
+  }
+
+  static async getLoginAuditLogs(req: Request, res: Response): Promise<void> {
+    try {
+      const { search, status, limit, offset } = req.query;
+      const data = await LoginModel.getLoginAuditLogs({
+        search: search ? String(search) : undefined,
+        status: status ? String(status) : undefined,
+        limit: limit ? parseInt(String(limit), 10) : 50,
+        offset: offset ? parseInt(String(offset), 10) : 0
+      });
+
+      res.status(200).json({
+        success: true,
+        data: data.logs,
+        total: data.total
+      });
+    } catch (err: any) {
+      console.error('[LoginController.getLoginAuditLogs Error]:', err);
+      res.status(500).json({
+        success: false,
+        error: err.message || 'Failed to fetch login audit logs.',
+        data: []
       });
     }
   }

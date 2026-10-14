@@ -4,7 +4,11 @@ import { UserRecord } from '../types/login.types';
 export class LoginModel {
   static async findUserByEmail(email: string): Promise<UserRecord | null> {
     const res = await pool.query(
-      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+      `SELECT u.*, c.status as company_status 
+       FROM users u 
+       LEFT JOIN companies c ON c.id = u.company_id 
+       WHERE LOWER(u.email) = LOWER($1) 
+       LIMIT 1;`,
       [email]
     );
     return res.rows[0] || null;
@@ -12,7 +16,11 @@ export class LoginModel {
 
   static async findUserById(id: string): Promise<UserRecord | null> {
     const res = await pool.query(
-      'SELECT * FROM users WHERE id = $1 LIMIT 1',
+      `SELECT u.*, c.status as company_status 
+       FROM users u 
+       LEFT JOIN companies c ON c.id = u.company_id 
+       WHERE u.id = $1 
+       LIMIT 1;`,
       [id]
     );
     return res.rows[0] || null;
@@ -118,5 +126,64 @@ export class LoginModel {
       'UPDATE password_resets SET used = true WHERE id = $1',
       [id]
     );
+  }
+
+  static async getLoginAuditLogs(params?: {
+    search?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ total: number; logs: any[] }> {
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+
+      if (params?.status && params.status !== 'All') {
+        conditions.push(`l.status = $${idx++}`);
+        values.push(params.status);
+      }
+
+      if (params?.search && params.search.trim()) {
+        const q = `%${params.search.trim()}%`;
+        conditions.push(`(
+          l.email ILIKE $${idx} OR 
+          l.ip_address ILIKE $${idx} OR 
+          l.city ILIKE $${idx} OR 
+          l.country ILIKE $${idx} OR 
+          l.browser_name ILIKE $${idx} OR 
+          l.os_name ILIKE $${idx}
+        )`);
+        values.push(q);
+        idx++;
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const limit = params?.limit || 50;
+      const offset = params?.offset || 0;
+
+      const countSql = `SELECT COUNT(*) as total FROM login_audit_logs l ${whereClause};`;
+      const countRes = await pool.query(countSql, values);
+      const total = parseInt(countRes.rows[0]?.total || '0', 10);
+
+      const dataSql = `
+        SELECT 
+          l.*,
+          u.first_name,
+          u.last_name,
+          u.role
+        FROM login_audit_logs l
+        LEFT JOIN users u ON u.id = l.user_id
+        ${whereClause}
+        ORDER BY l.created_at DESC
+        LIMIT $${idx++} OFFSET $${idx++};
+      `;
+      const dataRes = await pool.query(dataSql, [...values, limit, offset]);
+
+      return { total, logs: dataRes.rows };
+    } catch (err) {
+      console.error('[LoginModel.getLoginAuditLogs Error]:', err);
+      return { total: 0, logs: [] };
+    }
   }
 }

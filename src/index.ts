@@ -5,6 +5,9 @@ import dotenv from 'dotenv';
 import { EmployeePayroll, PayrollSummary } from './types.js';
 import { loginRoutes } from './Login/index.js';
 import { countryRoutes } from './Country/index.js';
+import { pricingRoutes } from './Pricing/index.js';
+import { onboardRoutes } from './Onboard/index.js';
+import { companyRoutes } from './Companies/index.js';
 
 dotenv.config();
 
@@ -33,7 +36,8 @@ app.use(cors({
   credentials: true
 }));
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Mount Login & Authentication Module
 app.use('/api/auth', loginRoutes);
@@ -42,6 +46,18 @@ app.use('/api', loginRoutes); // Also supports /api/login, /api/logout, /api/for
 // Mount Country Management Module
 app.use('/api/country', countryRoutes);
 app.use('/api/countries', countryRoutes);
+
+// Mount Pricing Management Module
+app.use('/api/pricing', pricingRoutes);
+
+// Mount Onboard Management Module
+app.use('/api/onboard', onboardRoutes);
+app.use('/api/onboarding', onboardRoutes);
+
+// Mount Companies Management Module
+app.use('/api/companies', companyRoutes);
+app.use('/api/company', companyRoutes);
+
 
 // In-memory data store for demonstration
 let employees: EmployeePayroll[] = [
