@@ -4,7 +4,7 @@ import { UserRecord } from '../types/login.types';
 export class LoginModel {
   static async findUserByEmail(email: string): Promise<UserRecord | null> {
     const res = await pool.query(
-      `SELECT u.*, c.status as company_status 
+      `SELECT u.*, c.status as company_status, c.name as company_name, c.logo as company_logo 
        FROM users u 
        LEFT JOIN companies c ON c.id = u.company_id 
        WHERE LOWER(u.email) = LOWER($1) 
@@ -16,7 +16,7 @@ export class LoginModel {
 
   static async findUserById(id: string): Promise<UserRecord | null> {
     const res = await pool.query(
-      `SELECT u.*, c.status as company_status 
+      `SELECT u.*, c.status as company_status, c.name as company_name, c.logo as company_logo 
        FROM users u 
        LEFT JOIN companies c ON c.id = u.company_id 
        WHERE u.id = $1 

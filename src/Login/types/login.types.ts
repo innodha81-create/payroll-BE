@@ -10,6 +10,8 @@ export interface UserRecord {
   is_active: boolean;
   company_id?: string | null;
   company_status?: string | null;
+  company_name?: string | null;
+  company_logo?: string | null;
   created_at: Date;
   updated_at: Date;
 }

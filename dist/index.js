@@ -12,6 +12,8 @@ const index_js_2 = require("./Country/index.js");
 const index_js_3 = require("./Pricing/index.js");
 const index_js_4 = require("./Onboard/index.js");
 const index_js_5 = require("./Companies/index.js");
+const index_js_6 = require("./PilotSetting/index.js");
+const index_js_7 = require("./HirePilot/index.js");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -51,6 +53,11 @@ app.use('/api/onboarding', index_js_4.onboardRoutes);
 // Mount Companies Management Module
 app.use('/api/companies', index_js_5.companyRoutes);
 app.use('/api/company', index_js_5.companyRoutes);
+// Mount Pilot Settings Management Module
+app.use('/api/pilotsetting', index_js_6.pilotSettingRoutes);
+app.use('/api/pilot-settings', index_js_6.pilotSettingRoutes);
+// Mount HirePilot Management Module
+app.use('/api/hirepilot', index_js_7.hirePilotRoutes);
 // In-memory data store for demonstration
 let employees = [
     {

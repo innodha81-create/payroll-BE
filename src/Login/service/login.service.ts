@@ -75,7 +75,10 @@ export class LoginService {
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
-        role: user.role
+        role: user.role,
+        companyId: user.company_id || null,
+        companyName: user.company_name || null,
+        companyLogo: user.company_logo || null
       },
       tokens: {
         accessToken: access.token,

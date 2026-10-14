@@ -8,6 +8,8 @@ import { countryRoutes } from './Country/index.js';
 import { pricingRoutes } from './Pricing/index.js';
 import { onboardRoutes } from './Onboard/index.js';
 import { companyRoutes } from './Companies/index.js';
+import { pilotSettingRoutes } from './PilotSetting/index.js';
+import { hirePilotRoutes } from './HirePilot/index.js';
 
 dotenv.config();
 
@@ -57,6 +59,13 @@ app.use('/api/onboarding', onboardRoutes);
 // Mount Companies Management Module
 app.use('/api/companies', companyRoutes);
 app.use('/api/company', companyRoutes);
+
+// Mount Pilot Settings Management Module
+app.use('/api/pilotsetting', pilotSettingRoutes);
+app.use('/api/pilot-settings', pilotSettingRoutes);
+
+// Mount HirePilot Management Module
+app.use('/api/hirepilot', hirePilotRoutes);
 
 
 // In-memory data store for demonstration
