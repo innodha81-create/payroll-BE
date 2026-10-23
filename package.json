@@ -4,10 +4,10 @@
   "description": "Payroll System Backend API in Node.js and TypeScript",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "dev": "node init && tsx watch src/index.ts",
+    "build": "node init && tsc",
     "postinstall": "npm run build",
-    "start": "node dist/index.js"
+    "start": "node init && node dist/index.js"
   },
   "keywords": [
     "payroll",
@@ -40,6 +40,7 @@
     "express": "^4.21.2",
     "geoip-lite": "^2.0.3",
     "jsonwebtoken": "^9.0.3",
+    "node-fetch": "^3.3.2",
     "nodemailer": "^10.1.0",
     "pg": "^8.23.1",
     "typescript": "^5.7.2",
