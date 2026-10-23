@@ -7,32 +7,29 @@ export class SubcompanyModel {
 
   public static async ensureTableExists(): Promise<void> {
     if (this.tableInitialized) return;
-    const query = `
-      CREATE TABLE IF NOT EXISTS subcompanies (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        parent_company_id UUID NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        phone VARCHAR(50),
-        country VARCHAR(100) NOT NULL,
-        logo TEXT,
-        status VARCHAR(20) DEFAULT 'Active',
-        address_info JSONB NOT NULL DEFAULT '{}'::jsonb,
-        tax_compliance_info JSONB NOT NULL DEFAULT '{}'::jsonb,
-        admin_info JSONB NOT NULL DEFAULT '{}'::jsonb,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_subcompanies_parent ON subcompanies(parent_company_id);
-      CREATE INDEX IF NOT EXISTS idx_subcompanies_name ON subcompanies(LOWER(name));
-      CREATE INDEX IF NOT EXISTS idx_subcompanies_status ON subcompanies(status);
-
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS subcompany_id UUID;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_subcompany BOOLEAN DEFAULT false;
-    `;
-    await pool.query(query);
     this.tableInitialized = true;
+    try {
+      const query = `
+        CREATE TABLE IF NOT EXISTS subcompanies (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          parent_company_id UUID NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          phone VARCHAR(50),
+          country VARCHAR(100) NOT NULL,
+          logo TEXT,
+          status VARCHAR(20) DEFAULT 'Active',
+          address_info JSONB NOT NULL DEFAULT '{}'::jsonb,
+          tax_compliance_info JSONB NOT NULL DEFAULT '{}'::jsonb,
+          admin_info JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `;
+      await pool.query(query);
+    } catch {
+      // Ignore if already exists
+    }
   }
 
   public static async createSubcompany(dto: CreateSubcompanyDto): Promise<SubcompanyRecord> {
