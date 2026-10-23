@@ -102,17 +102,16 @@ export class SubcompanyModel {
                  last_name = COALESCE($3, last_name), 
                  phone = COALESCE($4, phone), 
                  role = 'companyadmin', 
-                 company_id = $5, 
-                 subcompany_id = $6, 
+                 company_id = NULL, 
+                 subcompany_id = $5, 
                  is_subcompany = true, 
                  updated_at = NOW() 
-             WHERE LOWER(email) = LOWER($7);`,
+             WHERE LOWER(email) = LOWER($6);`,
             [
               passwordHash,
               dto.firstName?.trim() || null,
               dto.lastName?.trim() || null,
               dto.adminPhone?.trim() || dto.phone?.trim() || null,
-              dto.parent_company_id,
               subcompany.id,
               adminEmail.trim()
             ]
@@ -122,13 +121,12 @@ export class SubcompanyModel {
             `INSERT INTO users (
                email, password_hash, first_name, last_name, role, is_active,
                company_id, subcompany_id, is_subcompany, phone, created_at, updated_at
-             ) VALUES ($1, $2, $3, $4, 'companyadmin', true, $5, $6, true, $7, NOW(), NOW());`,
+             ) VALUES ($1, $2, $3, $4, 'companyadmin', true, NULL, $5, true, $6, NOW(), NOW());`,
             [
               adminEmail.trim(),
               passwordHash,
               dto.firstName?.trim() || 'Admin',
               dto.lastName?.trim() || '',
-              dto.parent_company_id,
               subcompany.id,
               dto.adminPhone?.trim() || dto.phone?.trim() || null
             ]

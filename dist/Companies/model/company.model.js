@@ -164,7 +164,7 @@ class CompanyModel {
         u.email as admin_email,
         u.phone as admin_phone
       FROM companies c
-      LEFT JOIN users u ON u.company_id = c.id AND u.role = 'companyadmin'
+      LEFT JOIN users u ON u.company_id = c.id AND u.role = 'companyadmin' AND (u.is_subcompany IS FALSE OR u.is_subcompany IS NULL) AND u.subcompany_id IS NULL
       ${whereClause}
       ORDER BY c.created_at DESC
       LIMIT $${idx} OFFSET $${idx + 1};
@@ -209,7 +209,7 @@ class CompanyModel {
         u.email as admin_email,
         u.phone as admin_phone
       FROM companies c
-      LEFT JOIN users u ON u.company_id = c.id AND u.role = 'companyadmin'
+      LEFT JOIN users u ON u.company_id = c.id AND u.role = 'companyadmin' AND (u.is_subcompany IS FALSE OR u.is_subcompany IS NULL) AND u.subcompany_id IS NULL
       WHERE c.id = $1
       LIMIT 1;
     `;
