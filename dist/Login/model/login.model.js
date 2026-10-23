@@ -4,17 +4,25 @@ exports.LoginModel = void 0;
 const db_1 = require("../../database/db");
 class LoginModel {
     static async findUserByEmail(email) {
-        const res = await db_1.pool.query(`SELECT u.*, c.status as company_status, c.name as company_name, c.logo as company_logo 
+        const res = await db_1.pool.query(`SELECT u.*, 
+              COALESCE(sc.status, c.status) as company_status, 
+              COALESCE(sc.name, c.name) as company_name, 
+              COALESCE(sc.logo, c.logo) as company_logo 
        FROM users u 
        LEFT JOIN companies c ON c.id = u.company_id 
+       LEFT JOIN subcompanies sc ON sc.id = u.subcompany_id 
        WHERE LOWER(u.email) = LOWER($1) 
        LIMIT 1;`, [email]);
         return res.rows[0] || null;
     }
     static async findUserById(id) {
-        const res = await db_1.pool.query(`SELECT u.*, c.status as company_status, c.name as company_name, c.logo as company_logo 
+        const res = await db_1.pool.query(`SELECT u.*, 
+              COALESCE(sc.status, c.status) as company_status, 
+              COALESCE(sc.name, c.name) as company_name, 
+              COALESCE(sc.logo, c.logo) as company_logo 
        FROM users u 
        LEFT JOIN companies c ON c.id = u.company_id 
+       LEFT JOIN subcompanies sc ON sc.id = u.subcompany_id 
        WHERE u.id = $1 
        LIMIT 1;`, [id]);
         return res.rows[0] || null;

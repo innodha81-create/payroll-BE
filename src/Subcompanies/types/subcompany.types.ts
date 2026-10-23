@@ -49,6 +49,7 @@ export interface CreateSubcompanyDto {
   lastName?: string;
   adminEmail?: string;
   adminPhone?: string;
+  password?: string;
 }
 
 export interface UpdateSubcompanyDto {

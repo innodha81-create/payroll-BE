@@ -28,9 +28,11 @@ router.get('/me', login_middleware_1.authenticateToken, async (req, res) => {
                         firstName: user.first_name,
                         lastName: user.last_name,
                         role: user.role,
-                        companyId: user.company_id || null,
+                        companyId: user.subcompany_id || user.company_id || null,
                         companyName: user.company_name || null,
-                        companyLogo: user.company_logo || null
+                        companyLogo: user.company_logo || null,
+                        subcompanyId: user.subcompany_id || null,
+                        isSubcompany: Boolean(user.is_subcompany || user.subcompany_id)
                     }
                     : req.user
             }

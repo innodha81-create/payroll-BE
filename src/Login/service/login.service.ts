@@ -76,9 +76,11 @@ export class LoginService {
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role,
-        companyId: user.company_id || null,
+        companyId: (user as any).subcompany_id || user.company_id || null,
         companyName: user.company_name || null,
-        companyLogo: user.company_logo || null
+        companyLogo: user.company_logo || null,
+        subcompanyId: (user as any).subcompany_id || null,
+        isSubcompany: Boolean((user as any).is_subcompany || (user as any).subcompany_id)
       },
       tokens: {
         accessToken: access.token,

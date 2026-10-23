@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import { pool } from '../../database/db';
 import { SubcompanyRecord, CreateSubcompanyDto, UpdateSubcompanyDto } from '../types/subcompany.types';
 
@@ -26,6 +27,9 @@ export class SubcompanyModel {
       CREATE INDEX IF NOT EXISTS idx_subcompanies_parent ON subcompanies(parent_company_id);
       CREATE INDEX IF NOT EXISTS idx_subcompanies_name ON subcompanies(LOWER(name));
       CREATE INDEX IF NOT EXISTS idx_subcompanies_status ON subcompanies(status);
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS subcompany_id UUID;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_subcompany BOOLEAN DEFAULT false;
     `;
     await pool.query(query);
     this.tableInitialized = true;
@@ -33,51 +37,113 @@ export class SubcompanyModel {
 
   public static async createSubcompany(dto: CreateSubcompanyDto): Promise<SubcompanyRecord> {
     await this.ensureTableExists();
+    const client = await pool.connect();
 
-    const addressInfo = {
-      streetAddress: dto.streetAddress || '',
-      city: dto.city || '',
-      state: dto.state || '',
-      country: dto.country || '',
-      pincode: dto.pincode || ''
-    };
+    try {
+      await client.query('BEGIN');
 
-    const taxComplianceInfo = {
-      uen: dto.uen || '',
-      companyType: dto.companyType || '',
-      pan: dto.pan || '',
-      gst: dto.gst || ''
-    };
+      const addressInfo = {
+        streetAddress: dto.streetAddress || '',
+        city: dto.city || '',
+        state: dto.state || '',
+        country: dto.country || '',
+        pincode: dto.pincode || ''
+      };
 
-    const adminInfo = {
-      firstName: dto.firstName || '',
-      lastName: dto.lastName || '',
-      email: dto.adminEmail || dto.email || '',
-      phone: dto.adminPhone || dto.phone || ''
-    };
+      const taxComplianceInfo = {
+        uen: dto.uen || '',
+        companyType: dto.companyType || '',
+        pan: dto.pan || '',
+        gst: dto.gst || ''
+      };
 
-    const sql = `
-      INSERT INTO subcompanies (
-        parent_company_id, name, email, phone, country, logo, status,
-        address_info, tax_compliance_info, admin_info, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-      RETURNING *;
-    `;
+      const adminInfo = {
+        firstName: dto.firstName || '',
+        lastName: dto.lastName || '',
+        email: dto.adminEmail || dto.email || '',
+        phone: dto.adminPhone || dto.phone || ''
+      };
 
-    const res = await pool.query(sql, [
-      dto.parent_company_id,
-      dto.name.trim(),
-      dto.email.trim(),
-      dto.phone ? dto.phone.trim() : null,
-      dto.country.trim(),
-      dto.logo || null,
-      dto.status || 'Active',
-      JSON.stringify(addressInfo),
-      JSON.stringify(taxComplianceInfo),
-      JSON.stringify(adminInfo)
-    ]);
+      const sql = `
+        INSERT INTO subcompanies (
+          parent_company_id, name, email, phone, country, logo, status,
+          address_info, tax_compliance_info, admin_info, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        RETURNING *;
+      `;
 
-    return res.rows[0];
+      const res = await client.query(sql, [
+        dto.parent_company_id,
+        dto.name.trim(),
+        dto.email.trim(),
+        dto.phone ? dto.phone.trim() : null,
+        dto.country.trim(),
+        dto.logo || null,
+        dto.status || 'Active',
+        JSON.stringify(addressInfo),
+        JSON.stringify(taxComplianceInfo),
+        JSON.stringify(adminInfo)
+      ]);
+
+      const subcompany = res.rows[0];
+
+      // Create Admin User for this Subcompany in users table
+      const adminEmail = dto.adminEmail || dto.email;
+      if (adminEmail && dto.password) {
+        const passwordHash = await bcrypt.hash(dto.password, 10);
+        const checkUserSql = 'SELECT id FROM users WHERE LOWER(email) = LOWER($1);';
+        const existingUser = await client.query(checkUserSql, [adminEmail.trim()]);
+
+        if (existingUser.rowCount && existingUser.rowCount > 0) {
+          await client.query(
+            `UPDATE users 
+             SET password_hash = $1, 
+                 first_name = COALESCE($2, first_name), 
+                 last_name = COALESCE($3, last_name), 
+                 phone = COALESCE($4, phone), 
+                 role = 'companyadmin', 
+                 company_id = $5, 
+                 subcompany_id = $6, 
+                 is_subcompany = true, 
+                 updated_at = NOW() 
+             WHERE LOWER(email) = LOWER($7);`,
+            [
+              passwordHash,
+              dto.firstName?.trim() || null,
+              dto.lastName?.trim() || null,
+              dto.adminPhone?.trim() || dto.phone?.trim() || null,
+              dto.parent_company_id,
+              subcompany.id,
+              adminEmail.trim()
+            ]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO users (
+               email, password_hash, first_name, last_name, role, is_active,
+               company_id, subcompany_id, is_subcompany, phone, created_at, updated_at
+             ) VALUES ($1, $2, $3, $4, 'companyadmin', true, $5, $6, true, $7, NOW(), NOW());`,
+            [
+              adminEmail.trim(),
+              passwordHash,
+              dto.firstName?.trim() || 'Admin',
+              dto.lastName?.trim() || '',
+              dto.parent_company_id,
+              subcompany.id,
+              dto.adminPhone?.trim() || dto.phone?.trim() || null
+            ]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+      return subcompany;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   public static async getSubcompaniesByParent(parentCompanyId: string): Promise<SubcompanyRecord[]> {
