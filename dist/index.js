@@ -12,6 +12,7 @@ const index_js_2 = require("./Country/index.js");
 const index_js_3 = require("./Pricing/index.js");
 const index_js_4 = require("./Onboard/index.js");
 const index_js_5 = require("./Companies/index.js");
+const index_js_6 = require("./Subcompanies/index.js");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 // Trust proxy for Render/Cloudflare load balancers to get real client IP
@@ -50,6 +51,9 @@ app.use('/api/onboarding', index_js_4.onboardRoutes);
 // Mount Companies Management Module
 app.use('/api/companies', index_js_5.companyRoutes);
 app.use('/api/company', index_js_5.companyRoutes);
+// Mount Subcompanies Management Module
+app.use('/api/subcompanies', index_js_6.subcompanyRoutes);
+app.use('/api/subcompany', index_js_6.subcompanyRoutes);
 // In-memory data store for demonstration
 let employees = [
     {

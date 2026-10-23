@@ -406,6 +406,15 @@ class CompanyModel {
     static async updateStatus(id, status) {
         await this.ensureTableExists();
         const res = await db_1.pool.query('UPDATE companies SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id;', [status, id]);
+        // Cascade Inactive to all subcompanies if parent company is set to Inactive
+        if (status === 'Inactive') {
+            try {
+                await db_1.pool.query("UPDATE subcompanies SET status = 'Inactive', updated_at = NOW() WHERE parent_company_id = $1;", [id]);
+            }
+            catch (subErr) {
+                console.error('[Cascade Inactive Error]:', subErr);
+            }
+        }
         return (res.rowCount ?? 0) > 0;
     }
     /**

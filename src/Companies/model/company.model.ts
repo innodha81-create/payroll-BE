@@ -465,6 +465,19 @@ export class CompanyModel {
       'UPDATE companies SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id;',
       [status, id]
     );
+
+    // Cascade Inactive to all subcompanies if parent company is set to Inactive
+    if (status === 'Inactive') {
+      try {
+        await pool.query(
+          "UPDATE subcompanies SET status = 'Inactive', updated_at = NOW() WHERE parent_company_id = $1;",
+          [id]
+        );
+      } catch (subErr) {
+        console.error('[Cascade Inactive Error]:', subErr);
+      }
+    }
+
     return (res.rowCount ?? 0) > 0;
   }
 
